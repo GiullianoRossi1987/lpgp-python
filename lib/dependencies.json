@@ -1,0 +1,9 @@
+{
+  "Dependencies": [
+    {"Name": "", "Package": "", "Installed": false}
+  ],
+  "GenInfo": {
+    "Version": "alpha",
+    "Restrict": false
+  }
+}

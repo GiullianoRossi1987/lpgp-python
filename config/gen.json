@@ -1,0 +1,17 @@
+{
+  "ClientAuth": "./config/client.clpgp",
+  "AutoAuth": true,
+  "AuthCon": {
+    "Username": "auth.py",
+    "Password": "",
+    "Port": 3306,
+    "Link": "127.0.0.1",
+    "Comment": "Just for the tests"
+  },
+  "AutoRunMode": 0,
+  "CLIArgs": [],
+  "Dependencies": {
+    "AutoCheck": false,
+    "RunWithout": false
+  }
+}
