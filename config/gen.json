@@ -1,17 +1,35 @@
 {
-  "ClientAuth": "./config/client.clpgp",
-  "AutoAuth": true,
-  "AuthCon": {
-    "Username": "auth.py",
-    "Password": "",
-    "Port": 3306,
-    "Link": "127.0.0.1",
-    "Comment": "Just for the tests"
-  },
-  "AutoRunMode": 0,
-  "CLIArgs": [],
   "Dependencies": {
-    "AutoCheck": false,
-    "RunWithout": false
+	"AutoCheck": false,
+	"RunWithout": false
+  },
+  "CLI": {
+	"Color": true,
+	"Min": false,
+	"VerboseAlways": false,
+	"ErrorSource": false,
+	"LogActivity": true,
+	"System"
+  },
+  "GUI": {
+	"Min": false,
+	"ShowErrors": true,
+	"LogActivity": true
+  },
+  "Login": {
+	"Enabled": false,
+	"UsingToken": true,
+	"Data": {
+	  "Username": "",
+	  "Token": "",
+	  "Password": null
+	}
+  },
+  "Logs": {
+	"Auth": "logs/client.log",
+	"Database": "logs/database-con.log",
+	"GUI": "logs/gui.log",
+	"CLI": "logs/cli.log",
+	"General": "logs/error.log"
   }
 }
