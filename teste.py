@@ -1,12 +1,11 @@
 # coding = utf-8
 # using namespace std
-from lib.auth.authcore import SocketConfig
+from config.configurations import Configurations
 
-sk = SocketConfig("lib/auth/config.json")
+con = Configurations("config/gen.json")
+con.commit()
+del con
 print("ok")
-sk.config['Name'] = "teste"
-with open(sk.file_got, "r") as dt: ss = sk.AddrConfig(dt.read())
-try: print(ss)
-except Exception: pass
-del sk
+
+
 

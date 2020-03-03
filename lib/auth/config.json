@@ -1,1 +1,1 @@
-{"Addr": {"Port": 1987, "Name": "Client", "IP": "127.0.0.1", "IP Protocol": 4}, "Action": {"auth-file": "lib/auth/auth.lpgp", "Permissive": false, "SendingMode": 0}, "Server": {"Port": 1987, "Name": "Client", "IP": "127.0.0.1", "IP Protocol": 4, "WaitHS": true}, "Name": "teste"}
+{"Addr": {"Port": 1987, "Name": "Client", "IP": "127.0.0.1", "IP Protocol": 4}, "Action": {"auth-file": "lib/auth/auth.lpgp", "Permissive": false, "SendingMode": 0}, "Server": {"Port": 1987, "Name": "Client", "IP": "127.0.0.1", "IP Protocol": 4, "WaitHS": true}}

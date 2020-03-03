@@ -158,15 +158,24 @@ class SocketConfig(object):
 			with open(self.file_got, "r") as config_sock: self.config = loads(config_sock.read())
 			self.got_file = True
 
-	def commit(self):
+	def commit(self, format_json: bool = False):
 		"""
 		Write all the changes done on the loaded document to the configurations file loaded.
 		:except ConfigLoadError: If there's no configurations file loaded yet;
+		:param format_json: If the "{" and "," at the document will be succeeded by a new line
 		:return: None
 		"""
 		if not self.got_file: raise self.ConfigLoadError("There's no configurations file loaded yet!")
-		with open(self.file_got, "w") as file:
+		with open(self.file_got, mode="w", encoding="utf-8") as file:
 			dumped = dumps(self.config)
+			if format_json:
+				chars = ["{", "}", ","]
+				for ck in chars:
+					if ck == "{": tmp = dumped.replace(ck, ck+"\n")
+					else:
+						if ck == "}": tmp = tmp.replace(ck, "\n"+ck)
+						tmp = tmp.replace(ck, ck+"\n")
+				dumped = tmp
 			file.write(dumped)
 			del dumped
 
