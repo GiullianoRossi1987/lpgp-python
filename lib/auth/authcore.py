@@ -198,6 +198,6 @@ class Client4(object):
 
 	class ConfigNotLoaded(Exception):
 		"""
-		Raised when the class try to access the SocketConfig object, but it wasn't
+		Raised when the class try to access the SocketConfig object, but it wasn't loaded
 		"""
 
