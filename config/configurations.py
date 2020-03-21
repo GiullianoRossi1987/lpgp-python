@@ -1,7 +1,6 @@
 # coding = utf-8
 # using namespace std
-from typing import AnyStr
-from lib.auth.authcore import GenericBlock
+from typing import AnyStr, Type
 from json import loads
 from json import dumps
 from json import JSONDecodeError
@@ -202,12 +201,7 @@ class Configurations(object):
 		"""
 		if self.got_file: self.unload_file()
 
-	class DependenciesBlock(GenericBlock):
-		"""
-		That class manages all the configurations about the dependencies loader.
-		"""
 
-		# TODO
 
 
 

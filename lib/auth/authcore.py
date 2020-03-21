@@ -7,38 +7,6 @@ from json import dumps
 from json import JSONDecodeError
 
 
-class GenericBlock(object):
-	"""
-	That class is a generic way to get the configurations block data. That class work only returning the specific field
-	of the block. To avoid calling the config attribute directly from the SocketConfig class.
-	:cvar bcontent: The configurations block content received
-	:cvar got_cont: If the class got a block content.
-	:type bcontent: dict
-	:type got_cont: bool
-	"""
-	bcontent: dict = {}
-	got_cont: bool = False
-
-	class InvalidBlock(Exception):
-		"""
-		<Exception> Raised when the class checks the block and it's invalid. The validation method is make by the
-		subclass
-		"""
-
-	class ContentError(Exception):
-		"""
-		<Exception> Raised when the class try to access the configurations block but that isn't loaded yet. Or the class
-		try to load a configurations block but there's another block loaded.
-		"""
-
-	def __str__(self):
-		"""
-		Return the JSON string parsed block content
-		:return:
-		"""
-		return dumps(self.bcontent) if self.got_cont else ""
-
-
 class SocketConfig(object):
 	"""
 	That class manages the configurations file of the socket client for the authentication.
@@ -206,260 +174,30 @@ class SocketConfig(object):
 		"""
 		if self.got_file: self.unload()
 
-	class AddrConfig(GenericBlock):
-		"""
-		That class represents the Address Configurations block of the configurations file loaded. That class have the main
-		methods to get only and directly with the Address configurations block.
-		"""
-		def ckblock(self, block: dict) -> True:
-			"""
-			Checks if a configurations block is valid. To be valid the block need to have the following structure:
-			  *   Port        (int)
-			  *   Name        (str)
-			  *   IP          (str)
-			  *   IP Protocol (int) [4/6]
-			:param block: The block to validate.
-			:except InvalidBlock: If there're errors in the block structure
-			:return: True if the structure is valid
-			"""
-			for field in block.keys():
-				if field == "Port" and int(block['Port']) <= 0:
-					raise self.InvalidBlock("Invalid Port value!")
-				elif field == "Name" and (len(block['Name']) <= 0):
-					raise self.InvalidBlock("Invalid Name value")
-				elif field == "IP" and (len(block['IP']) <= 0):
-					raise self.InvalidBlock("Invalid IP value")
-				elif field == "IP Protocol" and int(block['IP Protocol']) not in [4, 6]:
-					raise self.InvalidBlock("Invalid IP Protocol value")
-				elif field not in ["Port", "Name", "IP", "IP Protocol"]: raise self.InvalidBlock(f"Invalid field '{field}'")
-			return True
-
-		def parse_block_str(self, block: str, full: bool = True):
-			"""
-			Loads the configurations block to the class attributes. Using the configurations file string content.
-			:param block: The configurations string, directly from the file.
-			:param full: If the file have the all blocks, or if it's only the address block content.
-			:except ContentError: If there's another block loaded already.
-			:return: Nothing
-			"""
-			if self.got_cont: raise self.ContentError("There're another block loaded!")
-			if full:
-				prs = loads(block)
-				if self.ckblock(prs['Addr']):
-					self.bcontent = prs['Addr']
-					self.got_cont = True
-			else:
-				prs = loads(block)
-				if self.ckblock(prs):
-					self.bcontent = prs
-					self.got_cont = True
-
-		def unload_block(self):
-			"""
-			Unset the class attributes. Making possible load another block
-			:except BlockExistanceError: if there's no block loaded.
-			:return:
-			"""
-			if not self.got_cont: raise self.ContentError("There's no block loaded")
-			self.bcontent = {}
-			self.got_cont = False
-
-		def __init__(self, str_block: str = None):
-			"""
-			Start the class and set up the attributes, loading the block
-			:param str_block: The parsed configurations file content.
-			"""
-			if str_block is not None: self.parse_block_str(str_block)
-
-		def __del__(self):
-			"""
-			Garbage collection method, called when a class instance is removed from the memory.
-			:return:
-			"""
-			if self.got_cont: self.unload_block()
-
-	class ActionConfig(GenericBlock):
-		"""
-		That class contains the main methods to get the attributes of the action configurations block
-		"""
-
-		def ckblock(self, block: dict) -> True:
-			"""
-			Checks if a configurations block is valid. To be valid the block need to have the following structure:
-			  * auth-file (str)
-			  * Permissive (bool)
-			  * SendingMode (int)
-			:param block: The block to validate.
-			:except InvalidBlock: If there're errors in the block structure
-			:return: True if the structure is valid
-			"""
-			for field in block.keys():
-				if field == "auth-file" and len(block['auth-file']) <= 0:
-					raise self.InvalidBlock("Invalid Authentication file  value!")
-				elif field == "Permissive":
-					try:
-						b = bool(block[field])
-						del b
-					except TypeError or ValueError:
-						raise self.InvalidBlock("Invalid Name value")
-				elif field == "SendingMode" and (int(block['SendingMode']) not in [0, 1, 2]):
-					raise self.InvalidBlock("Invalid SendingMode value")
-				elif field not in ["auth-file", "Permissive", "SendingMode"]: raise self.InvalidBlock(f"Invalid field '{field}'")
-			return True
-
-		def parse_block_str(self, block: str, full: bool = True):
-			"""
-			Loads the configurations block to the class attributes. Using the configurations file string content.
-			:param block: The configurations string, directly from the file.
-			:param full: If the file have the all blocks, or if it's only the address block content.
-			:except ContentError: If there's another block loaded already.
-			:return: Nothing
-			"""
-			if self.got_cont: raise self.ContentError("There're another block loaded!")
-			if full:
-				prs = loads(block)
-				if self.ckblock(prs['Action']):
-					self.bcontent = prs['Action']
-					self.got_cont = True
-			else:
-				prs = loads(block)
-				if self.ckblock(prs):
-					self.bcontent = prs
-					self.got_cont = True
-
-		def unload_block(self):
-			"""
-			Unset the class attributes. Making possible load another block
-			:except BlockExistanceError: if there's no block loaded.
-			:return:
-			"""
-			if not self.got_cont: raise self.ContentError("There's no block loaded")
-			self.bcontent = {}
-			self.got_cont = False
-
-		def __init__(self, str_block: str = None):
-			"""
-			Start the class and set up the attributes, loading the block
-			:param str_block: The parsed configurations file content.
-			"""
-			if str_block is not None: self.parse_block_str(str_block)
-
-		def __del__(self):
-			"""
-			Garbage collection method, called when a class instance is removed from the memory.
-			:return:
-			"""
-			if self.got_cont: self.unload_block()
-
-	class ServerConfig(GenericBlock):
-		"""
-		That class manages the server configurations block from the configurations file loaded.
-		It's a subclass of the GenericBlock class.
-		"""
-
-		def ckblock(self, block: dict) -> True:
-			"""
-			Checks if a configurations block is valid. To be valid the block need to have the following structure:
-			  *   Port        (int)
-			  *   Name        (str)
-			  *   IP          (str)
-			  *   IP Protocol (int) [4/6]
-			:param block: The block to validate.
-			:except InvalidBlock: If there're errors in the block structure
-			:return: True if the structure is valid
-			"""
-			for field in block.keys():
-				if field == "Port" and int(block['Port']) <= 0:
-					raise self.InvalidBlock("Invalid Port value!")
-				elif field == "Name" and (len(block['Name']) <= 0):
-					raise self.InvalidBlock("Invalid Name value")
-				elif field == "IP" and (len(block['IP']) <= 0):
-					raise self.InvalidBlock("Invalid IP value")
-				elif field == "IP Protocol" and int(block['IP Protocol']) not in [4, 6]:
-					raise self.InvalidBlock("Invalid IP Protocol value")
-				elif field == "WaitHS":
-					try:
-						b = bool(block['WaitHS'])
-						del b
-					except TypeError or ValueError:
-						raise self.InvalidBlock("Invalid WaitHS Value")
-				elif field not in ["Port", "Name", "IP", "IP Protocol", "WaitHS"]: raise self.InvalidBlock(f"Invalid field '{field}'")
-			return True
-
-		def parse_block_str(self, block: str, full: bool = True):
-			"""
-			Loads the configurations block to the class attributes. Using the configurations file string content.
-			:param block: The configurations string, directly from the file.
-			:param full: If the file have the all blocks, or if it's only the address block content.
-			:except ContentError: If there's another block loaded already.
-			:return: Nothing
-			"""
-			if self.got_cont: raise self.ContentError("There're another block loaded!")
-			if full:
-				prs = loads(block)
-				if self.ckblock(prs['Server']):
-					self.bcontent = prs['Server']
-					self.got_cont = True
-			else:
-				prs = loads(block)
-				if self.ckblock(prs):
-					self.bcontent = prs
-					self.got_cont = True
-
-		def unload_block(self):
-			"""
-			Unset the class attributes. Making possible load another block
-			:except BlockExistanceError: if there's no block loaded.
-			:return:
-			"""
-			if not self.got_cont: raise self.ContentError("There's no block loaded")
-			self.bcontent = {}
-			self.got_cont = False
-
-		def __init__(self, str_block: str = None):
-			"""
-			Start the class and set up the attributes, loading the block
-			:param str_block: The parsed configurations file content.
-			"""
-			if str_block is not None: self.parse_block_str(str_block)
-
-		def __del__(self):
-			"""
-			Garbage collection method, called when a class instance is removed from the memory.
-			:return:
-			"""
-			if self.got_cont: self.unload_block()
-
-	def get_addr(self) -> AddrConfig:
-		"""
-		Return the Address Configurations block parsed using the AddrConfig class.
-		:except ConfigLoadError: If there's no configurations file loaded yet.
-		:return: The address configurations block
-		"""
-		if not self.got_file: raise self.ConfigLoadError("There's no configurations file loaded yet!")
-		addr = self.AddrConfig() # empty for while
-		with open(self.file_got, "r") as conf_tmp: addr.parse_block_str(conf_tmp.read())
-		return addr
-
-	def get_server(self) -> ServerConfig:
-		"""
-		Return the Server Configurations block, parsed using the ServerConfig class.
-		:except ConfgiLoadError: If there's no configurations file loaded yet
-		:return: The server configurations block
-		"""
-		if not self.got_file: raise self.ConfigLoadError("There's no configurations file loaded yet")
-		server = self.ServerConfig()
-		with open(self.file_got, "r") as tmp: server.parse_block_str(tmp.read())
-		return server
-
-	def get_action(self) -> ActionConfig:
-		"""
-
-		:return:
-		"""
-
 
 class Client4(object):
 	"""
-	Socket client for IPV4 connections, using the normal stream. It loads the
+	Socket client for IPV4 connections, using the normal stream. It loads a configurations class and uses it to the socket.
+	:cvar config: The configurations loaded using the SocketConfig class.
+	:cvar sock: The socket to use.
 	"""
+	config: SocketConfig
+	sock: socket = socket(AF_INET, SOCK_STREAM)
+
+	class SocketNotConfigured(Exception):
+		"""
+		Raised if the class try to access the own socket object but the socket object wasn't configured yet.
+		"""
+
+	class SocketAlreadyConfigured(Exception):
+		"""
+		Raised when the class try to configure the socket object, but the object is already configured. Normally it's
+		raised at the chsk method, but if you want to overwrite the configurations of the socket object use the method
+		oversk.
+		"""
+
+	class ConfigNotLoaded(Exception):
+		"""
+		Raised when the class try to access the SocketConfig object, but it wasn't
+		"""
+
