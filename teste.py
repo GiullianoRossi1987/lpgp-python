@@ -1,11 +1,9 @@
 # coding = utf-8
 # using namespace std
-from config.configurations import Configurations
+from lib.auth.authcore import SocketConfig, Client4
 
-con = Configurations("config/gen.json")
-con.commit()
-del con
-print("ok")
-
+sock = Client4("lib/auth/config.json")
+a = sock.connect_auth(False)
+print(a)
 
 

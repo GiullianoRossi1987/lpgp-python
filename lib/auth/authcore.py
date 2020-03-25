@@ -1,6 +1,6 @@
 # coding = utf-8
 # using namespace std
-from socket import socket, AF_INET, SOCK_STREAM, SOL_TCP, SOL_UDP, AF_INET6
+from socket import socket, AF_INET, SOCK_STREAM, SOL_TCP
 from typing import AnyStr
 from json import loads
 from json import dumps
@@ -161,7 +161,7 @@ class SocketConfig(object):
 
 	def __init__(self, config: AnyStr = None):
 		"""
-		Starts the class and set up the attributes, if the config param is not None.
+		Starts the class and set up the attributes, if the sock_conf param is not None.
 		:param config: The configurations file to autoload with the __init__ method.
 		"""
 		if config is not None: self.load_file(config)
@@ -180,9 +180,17 @@ class Client4(object):
 	Socket client for IPV4 connections, using the normal stream. It loads a configurations class and uses it to the socket.
 	:cvar config: The configurations loaded using the SocketConfig class.
 	:cvar sock: The socket to use.
+	:cvar con_info: The connection info, to connect the client only at the authentication method.
+	:cvar got_info: If the class got the connection configurations
 	"""
-	config: SocketConfig
-	sock: socket = socket(AF_INET, SOCK_STREAM)
+	sock_conf: SocketConfig
+	sock: socket = socket(AF_INET, SOCK_STREAM, SOL_TCP)
+	con_info = {
+		"Host": None,
+		"Port": None,
+		"Name": None
+	}
+	got_info: bool = False
 
 	class SocketNotConfigured(Exception):
 		"""
@@ -201,3 +209,86 @@ class Client4(object):
 		Raised when the class try to access the SocketConfig object, but it wasn't loaded
 		"""
 
+	class AuthenticationError(Exception):
+		"""
+		Raised when the connection
+		"""
+
+	def __init__(self, config: AnyStr = None):
+		"""
+		That method starts the socket client loading a configurations file to the SocketConfig object. That object
+		will set all the configurations info
+		:param config: The configurations file to load, if it's none then will load the default configurations file
+		"""
+		if self.got_info: raise self.SocketAlreadyConfigured("The socket configurations was already loaded.")
+		if config is None: self.sock_conf = SocketConfig("lib/auth/config.json")
+		self.sock_conf = SocketConfig(config)
+		self.con_info['Host'] = self.sock_conf.config['Addr']['IP']
+		self.con_info['Port'] = self.sock_conf.config['Addr']['Port']
+		self.con_info['Name'] = self.sock_conf.config['Addr']['Name']
+		self.got_info = True
+
+	@classmethod
+	def init_direct(cls, sender: SocketConfig):
+		"""
+		That method initialize the class with a external SocketConfig object, normally used when you already have the
+		configurations file loaded.
+		:param sender: The SocketConfig object to load.
+		:return: The class started with the sender.
+		"""
+		if cls.got_info: raise cls.SocketAlreadyConfigured("The socket got the configurations already")
+		cls.sock_conf = sender
+		cls.con_info['Host'] = cls.sock_conf.config['Addr']['IP']
+		cls.con_info['Port'] = cls.sock_conf.config['Addr']['Port']
+		cls.con_info['Name'] = cls.sock_conf.config['Addr']['Name']
+		cls.got_info = True
+		return cls
+
+	def __del__(self):
+		"""
+		That method closes the socket and the SocketConfig object. Used for the normal garbage collection of the system
+		:return:
+		"""
+		if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file/object loaded", 1)
+		self.sock_conf.unload()
+		self.sock.close()
+
+	def get_auth(self) -> tuple:
+		"""
+		That method returns the authentication .lpgp file content and it length, ready to be send to the server.
+		:return: Two values, the .lpgp file content and it length
+		"""
+		if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file/object loaded yet")
+		with open(self.sock_conf.config['Action']['auth-file'], "r") as auth:
+			return auth.read(), len(auth.read())
+
+	@staticmethod
+	def add_log(logs_file: AnyStr = "lib/auth/talkback.dat", data: str = "", from_server: bool = False):
+		"""
+
+		:param logs_file:
+		:param data:
+		:param from_server:
+		:return:
+		"""
+
+	def connect_auth(self, auto_raise: bool) -> tuple:
+		"""
+		That method connects to the authentication server and loads the authentication file.
+		:param auto_raise: If the method will throw a exception if the client file isn't valid.
+		:except ConfigNotLoaded: If there's no socket configurations file or SocketConfig object loaded.
+		:except AuthenticationError: If the client file isn't valid.
+		:return: The authentication server response, if the client file is valid (int) and the MySQL database access (string/None)
+		"""
+		#if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")
+		self.sock.connect((self.con_info['Host'], self.con_info['Port']))
+		handshake = self.sock.recv(1024, 0)
+		auth, bufsize = self.get_auth()
+		self.sock.send(bytes(auth, "UTF-8"), 0)
+		response = self.sock.recv(1024, 0)
+		splt = repr(response).split("/")
+		if "1" in splt[0]:
+			return tuple(splt)
+		else:
+			if auto_raise: raise self.AuthenticationError("Invalid client .lpgp file")
+			else: return "0", None
