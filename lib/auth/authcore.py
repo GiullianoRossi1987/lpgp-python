@@ -5,6 +5,7 @@ from typing import AnyStr
 from json import loads
 from json import dumps
 from json import JSONDecodeError
+from time import strftime
 
 
 class SocketConfig(object):
@@ -265,12 +266,16 @@ class Client4(object):
 	@staticmethod
 	def add_log(logs_file: AnyStr = "lib/auth/talkback.dat", data: str = "", from_server: bool = False):
 		"""
-
-		:param logs_file:
-		:param data:
-		:param from_server:
-		:return:
+		Sends all the connection relatory to a talkback file.
+		:param logs_file: The relatory file
+		:param data: The received/sent content
+		:param from_server: If received or sent the content.
+		:return: Nothing
 		"""
+		with open(logs_file, "a+", encoding="UTF-8") as talkback:
+			sender = "Server -> " if from_server else ">> "
+			talkback.write(f"[{strftime('%Y-%m-%d %H:%M:%S')}] {sender} {data}\n")
+			del sender
 
 	def connect_auth(self, auto_raise: bool) -> tuple:
 		"""
@@ -280,12 +285,15 @@ class Client4(object):
 		:except AuthenticationError: If the client file isn't valid.
 		:return: The authentication server response, if the client file is valid (int) and the MySQL database access (string/None)
 		"""
-		#if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")
+		#if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")   TODO: Strange Error
 		self.sock.connect((self.con_info['Host'], self.con_info['Port']))
 		handshake = self.sock.recv(1024, 0)
+		self.add_log(data=str(handshake, "UTF-8"), from_server=True)
 		auth, bufsize = self.get_auth()
 		self.sock.send(bytes(auth, "UTF-8"), 0)
+		self.add_log(data=auth, from_server=False)
 		response = self.sock.recv(1024, 0)
+		self.add_log(data=str(response, "UTF-8"), from_server=True)
 		splt = repr(response).split("/")
 		if "1" in splt[0]:
 			return tuple(splt)
