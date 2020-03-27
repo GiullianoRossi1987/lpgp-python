@@ -127,7 +127,7 @@ class SocketConfig(object):
 			with open(self.file_got, "r") as config_sock: self.config = loads(config_sock.read())
 			self.got_file = True
 
-	def commit(self, format_json: bool = False):
+	def commit(self, format_json: bool = True):
 		"""
 		Write all the changes done on the loaded document to the configurations file loaded.
 		:except ConfigLoadError: If there's no configurations file loaded yet;
@@ -189,7 +189,8 @@ class Client4(object):
 	con_info = {
 		"Host": None,
 		"Port": None,
-		"Name": None
+		"Name": None,
+		"HSRe": None
 	}
 	got_info: bool = False
 
@@ -224,9 +225,10 @@ class Client4(object):
 		if self.got_info: raise self.SocketAlreadyConfigured("The socket configurations was already loaded.")
 		if config is None: self.sock_conf = SocketConfig("lib/auth/config.json")
 		self.sock_conf = SocketConfig(config)
-		self.con_info['Host'] = self.sock_conf.config['Addr']['IP']
-		self.con_info['Port'] = self.sock_conf.config['Addr']['Port']
-		self.con_info['Name'] = self.sock_conf.config['Addr']['Name']
+		self.con_info['Host'] = self.sock_conf.config['Server']['IP']
+		self.con_info['Port'] = self.sock_conf.config['Server']['Port']
+		self.con_info['Name'] = self.sock_conf.config['Server']['Name']
+		self.con_info['HSRe'] = self.sock_conf.config['Server']['WaitHS']
 		self.got_info = True
 
 	@classmethod
@@ -239,9 +241,9 @@ class Client4(object):
 		"""
 		if cls.got_info: raise cls.SocketAlreadyConfigured("The socket got the configurations already")
 		cls.sock_conf = sender
-		cls.con_info['Host'] = cls.sock_conf.config['Addr']['IP']
-		cls.con_info['Port'] = cls.sock_conf.config['Addr']['Port']
-		cls.con_info['Name'] = cls.sock_conf.config['Addr']['Name']
+		cls.con_info['Host'] = cls.sock_conf.config['Server']['IP']
+		cls.con_info['Port'] = cls.sock_conf.config['Server']['Port']
+		cls.con_info['Name'] = cls.sock_conf.config['Server']['Name']
 		cls.got_info = True
 		return cls
 
@@ -285,10 +287,11 @@ class Client4(object):
 		:except AuthenticationError: If the client file isn't valid.
 		:return: The authentication server response, if the client file is valid (int) and the MySQL database access (string/None)
 		"""
-		#if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")   TODO: Strange Error
-		self.sock.connect((self.con_info['Host'], self.con_info['Port']))
-		handshake = self.sock.recv(1024, 0)
-		self.add_log(data=str(handshake, "UTF-8"), from_server=True)
+		if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")
+		if bool(self.con_info['HSRe']):
+			self.sock.connect((self.con_info['Host'], self.con_info['Port']))
+			handshake = self.sock.recv(1024, 0)
+			self.add_log(data=str(handshake, "UTF-8"), from_server=True)
 		auth, bufsize = self.get_auth()
 		self.sock.send(bytes(auth, "UTF-8"), 0)
 		self.add_log(data=auth, from_server=False)
