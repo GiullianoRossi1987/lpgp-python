@@ -334,3 +334,59 @@ class MySQLAccountManager(MySQLExternalConnection):
 		if dp[-1] != ".com": return False
 		del dp
 		return True
+
+	def ch_email(self, new_email: str):
+		"""
+		That method changes the email address of the client owner.
+		:param new_email: The new email address to set
+		:except ConnectionError: If the client isn't connected
+		:except RootRequiredError: If the client isn't a root client
+		:except InvalidEmail: If the email address isn't valid
+		"""
+		if not self.got_conn: raise self.ConnectionError("The class isn't connected!")
+		if not self.con_data.document['RootMode']:
+			raise self.RootRequiredError("The root permission is required for that action!")
+		if not self.ck_email(new_email):
+			raise self.InvalidEmail("Invalid e-mail address! Please verify if it have '@' and '.com'")
+		with self.connection.cursor() as cursor:
+			if self.con_data.document['Mode'] == 0:
+				rq = cursor.execute(f"UPDATE tb_proprietaries SET vl_email = \"{new_email}\" WHERE cd_proprietary = {self.con_data.document['LocalAccountID']};")
+			else:
+				rq = cursor.execute(f"UPDATE tb_users SET vl_email = \"{new_email}\" WHERE cd_user = {self.con_data.document['LocalAccountID']};")
+			del rq
+
+	def ch_passwd(self, new_passwd: str, encoded: bool = False):
+		"""
+		That method changes the owner password.
+		:param new_passwd: The new password to set
+		:param encoded: If the password is encrypted, if not it'll encrypt it
+		:except ConnectionError: If the class ins't connected to the database.
+		:except RootRequiredError: If the client isn't a root client
+		"""
+		if not self.got_conn: raise self.ConnectionError("The class isn't connected")
+		if not self.con_data.document['RootMode']:
+			raise self.RootRequiredError("The root client is required for that action")
+		with self.connection.cursor() as cursor:
+			passwd_new = b64encode(new_passwd) if not encoded else new_passwd
+			if self.con_data.document['Mode'] == 0:
+				rt = cursor.execute(f"UPDATE tb_proprietaries SET vl_password = \"{passwd_new}\" WHERE cd_proprietary = {self.con_data.document['LocalAccountID']}")
+			else:
+				rt = cursor.execute(
+					f"UPDATE users SET vl_password = \"{passwd_new}\" WHERE cd_user = {self.con_data.document['LocalAccountID']}")
+			del rt
+
+
+class MySQLOwnerHistory(MySQLExternalConnection):
+	"""
+	That class manages the client owner signature check history. That management is just add and list the history records
+	"""
+
+	def get_tb(self) -> str:
+		"""
+		That method is simple, it just return one table if the owner is a proprietary or a normal user.
+		:except ConnectionError: If the class isn't connected
+		:return: The table used for the owner account type.
+		"""
+		if not self.got_conn: raise self.ConnectionError("The client isn't connected!")
+		return "tb_signatures_prop_h" if self.con_data.document["Mode"] == 0 else "tb_signature_check_history"
+
