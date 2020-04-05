@@ -2,10 +2,7 @@
 "General": {
 "Primary-Host": "127.0.0.1",
  "Default-Port": 3306,
- "Connection-Logs": "logs/client-mysql.log",
- "LocalAccountID": 1,
- "RootMode": false,
- "Mode": 0
+ "Connection-Logs": "logs/client-mysql.log"
 }
 
 }
