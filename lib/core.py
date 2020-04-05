@@ -8,6 +8,8 @@ from pymysql import connect
 from base64 import b64encode
 from base64 import b64decode
 import hashlib
+from os import listdir
+from sys import platform
 
 
 class MySQLConnectionOptions(object):
@@ -174,7 +176,7 @@ class MySQLExternalConnection(object):
 		data such as the ID.
 		"""
 
-	class ConnectionError(Exception):
+	class MySQLConnectionError(Exception):
 		"""
 		Exception raised when the class try to load a MySQL client and connection data, but there's another client created
 		or configured already as a attribute. Also raised when the class try to access the client and/or the connection
@@ -187,9 +189,9 @@ class MySQLExternalConnection(object):
 		the client configurations file.
 		:param action: The action that the client did
 		:param success: If it was successfully executed
-		:except ConnectionError: If there's no client or connection options loaded.
+		:except MySQLConnectionError: If there's no client or connection options loaded.
 		"""
-		if not self.got_conn: raise self.ConnectionError("There's no connection or connections configurations file loaded!")
+		if not self.got_conn: raise self.MySQLConnectionError("There's no connection or connections configurations file loaded!")
 		with open(self.con_data.document['General']['Connection-Logs'], "a+", encoding="UTF-8") as logs:
 			today = strftime("%Y-%m-%d %H:%M:%S")
 			err = "{ERROR}" if not success else ""
@@ -202,9 +204,9 @@ class MySQLExternalConnection(object):
 		:param config: The MySQLConnectionOptions object to load, to get the connection options.
 		:param usr_access: The user access received from the server
 	
-		:except ConnectionError: If the class already got a connection
+		:except MySQLConnectionError: If the class already got a connection
 		"""
-		if self.got_conn: raise self.ConnectionError("There's a MySQL connection already configured!")
+		if self.got_conn: raise self.MySQLConnectionError("There's a MySQL connection already configured!")
 
 		self.con_data = config
 		self.connection = connect(
@@ -219,9 +221,9 @@ class MySQLExternalConnection(object):
 	def disconnect(self):
 		"""
 		That class unset the class attributes. Used to generate another connection but with the same class object/instance.
-		:except ConnectionError: If the class isn't connected
+		:except MySQLConnectionError: If the class isn't connected
 		"""
-		if not self.got_conn: raise self.ConnectionError("The class must be connected!")
+		if not self.got_conn: raise self.MySQLConnectionError("The class must be connected!")
 		self.connection.commit()
 		self.connection.close()
 		self.con_data.unload()
@@ -259,10 +261,10 @@ class MySQLAccountManager(MySQLExternalConnection):
 		"""
 		That method return the owner info, such as him name, email, password, if it was checked or not.
 		The method don't require root account.
-		:except ConnectionError: If there's no database connected.
+		:except MySQLConnectionError: If there's no database connected.
 		:return: A tuple with it data
 		"""
-		if not self.got_conn: raise self.ConnectionError("There's no database connected")
+		if not self.got_conn: raise self.MySQLConnectionError("There's no database connected")
 		with self.connection.cursor() as cursor:
 			if self.con_data.document["Mode"] == 0:
 				rt = cursor.execute(f"SELECT nm_proprietary, vl_email, vl_password, dt_creation FROM tb_proprietaries WHERE cd_proprietary = {self.con_data.document['LocalAccountID']};")
@@ -308,10 +310,10 @@ class MySQLAccountManager(MySQLExternalConnection):
 		"""
 		That method changes the user name. That method can only be done with a
 		:param new_name: The new name value
-		:except ConnectionError: If the class didn't got a database connected
+		:except MySQLConnectionError: If the class didn't got a database connected
 		:except RootRequiredError: If the client isn't a root client to do that action
 		"""
-		if not self.got_conn: raise self.ConnectionError("There's no database connected")
+		if not self.got_conn: raise self.MySQLConnectionError("There's no database connected")
 		if not self.con_data.document['RootMode']:
 			raise self.RootRequiredError("The client don't have permission to do that!")
 		with self.connection.cursor() as cursor:
@@ -339,11 +341,11 @@ class MySQLAccountManager(MySQLExternalConnection):
 		"""
 		That method changes the email address of the client owner.
 		:param new_email: The new email address to set
-		:except ConnectionError: If the client isn't connected
+		:except MySQLConnectionError: If the client isn't connected
 		:except RootRequiredError: If the client isn't a root client
 		:except InvalidEmail: If the email address isn't valid
 		"""
-		if not self.got_conn: raise self.ConnectionError("The class isn't connected!")
+		if not self.got_conn: raise self.MySQLConnectionError("The class isn't connected!")
 		if not self.con_data.document['RootMode']:
 			raise self.RootRequiredError("The root permission is required for that action!")
 		if not self.ck_email(new_email):
@@ -360,10 +362,10 @@ class MySQLAccountManager(MySQLExternalConnection):
 		That method changes the owner password.
 		:param new_passwd: The new password to set
 		:param encoded: If the password is encrypted, if not it'll encrypt it
-		:except ConnectionError: If the class ins't connected to the database.
+		:except MySQLConnectionError: If the class ins't connected to the database.
 		:except RootRequiredError: If the client isn't a root client
 		"""
-		if not self.got_conn: raise self.ConnectionError("The class isn't connected")
+		if not self.got_conn: raise self.MySQLConnectionError("The class isn't connected")
 		if not self.con_data.document['RootMode']:
 			raise self.RootRequiredError("The root client is required for that action")
 		with self.connection.cursor() as cursor:
@@ -381,12 +383,359 @@ class MySQLOwnerHistory(MySQLExternalConnection):
 	That class manages the client owner signature check history. That management is just add and list the history records
 	"""
 
-	def get_tb(self) -> str:
+	class ParameterLogicError(Exception):
 		"""
-		That method is simple, it just return one table if the owner is a proprietary or a normal user.
-		:except ConnectionError: If the class isn't connected
-		:return: The table used for the owner account type.
+		Exception raised when illogical parameters are received from a method, maybe a code different then 0 to a successful
+		action.
 		"""
-		if not self.got_conn: raise self.ConnectionError("The client isn't connected!")
-		return "tb_signatures_prop_h" if self.con_data.document["Mode"] == 0 else "tb_signature_check_history"
+
+	def add_record(self, signature_ref: int, valid: bool = True, code: int = 0, dt_: str = strftime("%Y-%m-%d %H:%M:%S")):
+		"""
+		That method add a new history record to the owner history table. That method is normally used at the end of each
+		signature verification.
+		:param signature_ref: The signature checked ID
+		:param valid: If the operation was successful, in this case the code have to be 0.
+		:param code: The error code. In no errors case, then it'll be 0
+		:param dt_: The date to set at the database
+		:except MySQLConnectionError: If the client isn't connected yet
+		:except ParameterLogicalError: If there're discrepancies between the valid and the code parameter. For example
+										the action was a success but the code isn't 0
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if (valid and code != 0) or (not valid and code == 0):
+			raise self.ParameterLogicError("There're programming logical errors with the parameters ::valid and ::code received")
+		with self.connection.cursor() as cursor:
+			owner_ref = self.con_data.document['LocalAccountID']
+			val = 1 if valid else 0
+			if self.con_data.document['Mode'] == 0:
+				crs = cursor.execute(f"INSERT INTO tb_signatures_prop_h (id_prop, id_signature, vl_code, vl_valid, dt_reg) VALUES ({owner_ref}, {signature_ref}, {code}, {val}, {dt_});")
+			else:
+				crs = cursor.execute(
+					f"INSERT INTO tb_signature_check_history (id_user id_signature, vl_code, vl_valid, dt_reg) VALUES ({owner_ref}, {signature_ref}, {code}, {val}, {dt_});")
+		del crs
+
+	def get_records(self) -> tuple:
+		"""
+		That method returns all the records of the owner history.
+		:except MySQLConnectionError: If the client isn't connected
+		:except RootRequiredError: If the client doesn't have the root permission
+		:return: A tuple with the owner history records
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
+		if not self.con_data.document['RootMode']: raise self.RootRequiredError("The client must be root to do that action!")
+		with self.connection.cursor() as cursor:
+			if self.con_data.document['Mode'] == 0: c = cursor.execute(f"SELECT * FROM tb_signatures_prop_h WHERE id_prop = {self.con_data.document['LocalAccountID']};")
+			else: c = cursor.execute(f"SELECT * FROM tb_signature_check_history WHERE id_user = {self.con_data.document['LocalAccountID']};")
+			return cursor.fetchall() if c > 0 else None
+
+
+class MySQLSignaturesManager(MySQLExternalConnection):
+	"""
+	That class represents the signatures files operations and the owner signatures. That class creates, authenticates and
+	manages the signatures files, also managing the owner signatures.
+	:cvar algos: The options to decoding and encoding.
+	:cvar delimiter: The root encryption delimiter
+	"""
+	algos: tuple = ("md5", 'sha1', 'sha256')
+	delimiter: str = "/"
+
+	class AccountError(Exception):
+		"""
+		Exception raised when the owner isn't a proprietary and try to access data or signatures that doesn't bellow to
+		him
+		"""
+
+	class AlgoError(Exception):
+		"""
+		Exception raised when the client can't find the referred algo.
+		"""
+
+	class EncryptionError(Exception):
+		"""
+		Exception raised when the client try to authenticate a signature but the referred algo id don't exist.
+		"""
+
+	class AuthenticationError(Exception):
+		"""
+		Exception raised when the class try to authenticate a signatures file, but the file isn't valid.
+		"""
+
+	class DecodingError(Exception):
+		"""
+		Exception raised when the class try to decrypt a LPGP file but there're errors with the file encryption.
+		"""
+
+	class SignatureNotFound(Exception):
+		"""
+		Exception raised when the class try to access a signature data record, using a primary key reference, but it
+		doesn't exist
+		"""
+
+	def ck_sigex(self, ref: int) -> bool:
+		"""
+		That method check if a signature reference exists.
+		:param ref: The primary key reference of the signature record.
+		:except MySQLConnectionError: If the client isn't connected
+		:return: If the signature reference exists.
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"SELECT * FROM tb_signatures WHERE cd_signature = {ref};")
+			return rr > 0
+
+	def ck_own(self, ref: int) -> bool:
+		"""
+		That method check if the client owner have the referred signature.
+		:param ref: The signature primary key reference
+		:except MySQLConnectionError: If the client isn't connected to a MySQL database
+		:except SignatureNotFound: If the signature referenced doesn't exist
+		:return: True if the client owner also own the signature referred, False if not
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if not self.ck_sigex(ref): raise self.SignatureNotFound(f"Can't find signature #{ref}")
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"SELECT id_proprietary FROM tb_signatures WHERE cd_signature = {ref};")
+			id_or = cursor.fetchone()[0]
+			del rr
+		return id_or == self.con_data.document['LocalAccountId']
+
+	def decode_root(self, code: str) -> dict:
+		"""
+		That method decodes the original encryption of the, and parsing the JSON decoded content.
+		:param code: The file content or just content to decode
+		:except DecodingError: If there were troubles decoding the content.
+		:return: The json parsed content.
+		"""
+		try:
+			exp = code.split(self.delimiter)
+			dt = [chr(int(x)) for x in exp]
+			json_to = "".join(dt)
+			return loads(json_to, encoding="UTF-8")
+		except JSONDecodeError as e:
+			raise self.DecodingError("ERROR >> " + e.msg)
+
+	@staticmethod
+	def encode_root(data: str) -> str:
+		"""
+		That method encodes a string with signature data.
+		:param data: The string with the signature data.
+		:return: The encoded signature data.
+		"""
+		epl = data.split("")
+		dumped = ""
+		for i in epl: dumped += ord(i)
+		del epl
+		return dumped
+
+	def encode_hash(self, data: str, hash_id: int) -> str:
+		"""
+		That method uses the hashlib to encode data with a hash id, normally received from the signatures
+		database.
+		:param data: The content to encode.
+		:param hash_id: The hash id to encode.
+		:except EncryptionError: If the hash id isn't valid for the class.
+		:return: The hash encoded content.
+		"""
+		try:
+			tt = self.algos[hash_id]
+			del tt
+		except IndexError: raise self.EncryptionError(f"The code {hash_id} isn't valid")
+		if hash_id == 0:
+			md5 = hashlib.md5()
+			md5.update(bytes(data, encoding="UTF-8"))
+			return md5.hexdigest()
+		elif hash_id == 1:
+			sha1 = hashlib.sha1()
+			sha1.update(bytes(data, encoding="utf-8"))
+			return sha1.hexdigest()
+		elif hash_id == 2:
+			sha256 = hashlib.sha256()
+			sha256.update(bytes(data, encoding="UTF-8"))
+			return sha256.hexdigest()
+		else: raise self.EncryptionError(f"Code not found {hash_id}")
+
+	@staticmethod
+	def gen_filenm(path: AnyStr) -> AnyStr:
+		"""
+		That method generate a signature file name in a specific path. Verifying if the file exists or not.
+		:param path: The path to check the signatures files existences.
+		:return: The signature file name.
+		"""
+		while True:
+			rec_num = 0
+			nm = "signature-file-" + str(rec_num)
+			if nm in listdir(path):
+				rec_num+=1
+				continue
+			else: break
+		return nm
+
+	def authenticate_file(self, file_path: AnyStr, auto_raise: bool = True) -> tuple:
+		"""
+		That method checks if a signature file is valid or not. That method will decode and check the signature data at
+		the file
+		:param file_path: The .lpgp file to authenticate
+		:param auto_raise: If the method will raise the AuthenticationError exception automatically
+		:except MySQLConnectionError: If the client isn't connected yet
+		:except AuthenticationError: If the signature file can't be decoded or is invalid
+		:return: If the file is a valid signature or not, and the error message, if no errors will return the signature data
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
+		with open(file_path, "r", encoding="UTF-8") as signature:
+			dt_sig = self.decode_root(signature.read())
+			with self.connection.cursor() as cursor:
+				if not self.ck_sigex(int(dt_sig['ID'])):
+					if auto_raise: raise self.AuthenticationError("Invalid Signature -> The reference 'ID' doesn't exist")
+					else: return False, "ID reference doesn't exist"
+				rr = cursor.execute(f"SELECT vl_password FROM tb_signatures WHERE cd_signature = {dt_sig['ID']};")
+				if cursor.fetchone()[0] != dt_sig['Signature']:
+					if auto_raise: raise self.AuthenticationError("Invalid Signature -> Token invalid")
+					else: return False, "Invalid token"
+				rr2 = cursor.execute(f"SELECT cd_proprietary FROM tb_proprietaries WHERE nm_proprietary = \"{dt_sig['Proprietary']}\";")
+				if rr2 < 0:
+					if auto_raise: raise self.AuthenticationError("Invalid Signature -> Proprietary not found!")
+					else: return False, "Proprietary not found"
+				del rr, rr2
+		return True, dt_sig
+
+	def get_sigdt(self, ref: int) -> tuple:
+		"""
+		That method return the signature main data of a specific signature.
+		:param ref: The signature reference.
+		:return:
+		"""
+
+	# Root Actions
+	##################################################################################
+
+	def create_signature_file(self, path: AnyStr, ref: int):
+		"""
+		That method generate a signature file to a path.
+		:param path: The path to create the signature file.
+		:param ref: The primary key signature reference
+		:except MySQLConnectionError: If the client isn't connected
+		:except AccountError: If the owner account type isn't proprietary
+		:except RootRequiredError: If the client isn't a root client
+		:except SignatureNotFound: If the reference doesn't exist or if the owner don't own the referred signature
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if self.con_data.document['Mode'] != 0: raise self.AccountError("You must be a proprietary to access this feature")
+		if not self.con_data.document['RootMode']: raise self.RootRequiredError("The client must be root to do that action")
+		if not self.ck_sigex(ref): raise self.SignatureNotFound(f"The client can't find the signature #{ref}")
+		if not self.ck_own(ref): raise self.SignatureNotFound(f"You don't own the signature #{ref}")
+		nm_file = self.gen_filenm(path)
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"SELECT prp.nm_proprietary, sg.vl_password FROM tb_signatures AS sg INNER JOIN "
+								f"tb_proprietaries AS prp ON prp.cd_proprietary = sg.id_proprietary WHERE "
+								f"sg.cd_signature = {ref};")
+			dt_now = strftime("%Y-%m-%d %H:%M:%S")
+			json_data = {
+				"Date-Creation": dt_now,
+				"Proprietary": cursor.fetchone()[0],
+				"ID": ref,
+				"Signature": cursor.fetchone()[1]
+			}
+			content = self.encode_root(dumps(json_data))
+			path_file = path + "/" if "windows" not in platform else "\\" + nm_file
+			with open(path_file, "w+", encoding="utf-8") as signature:
+				signature.write(content)
+			del rr
+		# TODO - Create the logs manager
+
+	def add_sig(self, code: int, password: str):
+		"""
+		That method creates a signature in the owner name.
+		:param code: The algo index, a option to the encoding.
+		:param password: The main word to create the signature.
+		:except MySQLConnectionError: If the client isn't connected to a MySQL database.
+		:except RootRequiredError: If the client don't have root permissions
+		:except AccountError: If the owner is a normal user instead a proprietary
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if not self.con_data.document['RootMode']:
+			raise self.RootRequiredError("The client need root permissions!")
+		if self.con_data.document["Mode"] != 0:
+			raise self.AccountError("You must be a proprietary to do that action")
+		if code > len(self.algos) or code < 0: raise IndexError("Invalid signature code!")
+		with self.connection.cursor() as cursor:
+			_pass = self.encode_hash(password, code)
+			rr = cursor.execute(f"INSERT INTO tb_signatures (vl_code, vl_password, id_proprietary) "
+								f"VALUES ({code}, \"{_pass}\", {self.con_data.document['LocalAccountID']});")
+			del rr
+			del _pass
+
+	def rm_sig(self, ref: int):
+		"""
+		That method deletes a signature data record from the owner, in other words it excludes a signature that owns
+		to the client owner.
+		:param ref: The signature referenced
+		:except MySQLConnectionError: If the client isn't connected to a database
+		:except RootRequiredError: If the client don't have root permissions
+		:except SignatureNotFound: If the signature reference doesn't exist or the client owner don't own it.
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if not self.con_data.document['RootMode']: raise self.RootRequiredError("The client need root permissions")
+		if not self.ck_sigex(ref) or not self.ck_own(ref):
+			raise self.SignatureNotFound(f"The signature #{ref} doesn't exist or you don't own it.")
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"DELETE FROM tb_signatures WHERE cd_signature = {ref};")
+			del rr
+
+	def ch_sig_code(self, ref: int, new_code: int, pas_conf: str):
+		"""
+		That method changes the signature algo index reference.
+		:param ref: The primary key of the referred signature to update
+		:param new_code: The new hash index using to the process.
+		:param pas_conf: The signature password confirmation to re-encode
+		:except MySQLConnectionError: If the client isn't connected yet
+		:except RootRequiredError: If the client don't have a root permission
+		:except SignatureNotFound: If the referred signature doesn't exist.
+		:except EncryptionError: If the hash index (new_code) isn't valid
+		:except AuthenticationError: If the password confirmed received isn't the same.
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
+		if not self.con_data.document['RootMode']:
+			raise self.RootRequiredError("The client need root permission to do that action!")
+		if not self.ck_sigex(ref) or not self.ck_own(ref):
+			raise self.SignatureNotFound(f"The referred signature #{ref} doesn't exist or you don't own it.")
+		if new_code < 0 or new_code > len(self.algos):
+			raise self.EncryptionError(f"The numeric code reference {new_code} isn't valid")
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"SELECT vl_code, vl_password FROM tb_signatures WHERE cd_signature = {ref};")
+			or_code = int(cursor.fetchone()[0])
+			auth_hash = self.encode_hash(pas_conf, or_code)
+			if auth_hash !=  cursor.fetchone()[1]:
+				raise self.AuthenticationError("The password doesn't matches")
+			del rr
+			hashed = self.encode_hash(cursor.fetchone()[1], new_code)
+			rr = cursor.execute(f"UPDATE tb_signatures SET vl_code = {new_code}, vl_password = \"{hashed}\" WHERE cd_signature = {ref};")
+			del rr, hashed
+
+	def ch_sig_pas(self, ref: int, new_pass: str):
+		"""
+		That method changes the signature main password, that word is encoded to be the pure signature.
+		:param ref: The signature referenced to change the password.
+		:param new_pass: The new password value.
+		:except MySQLConnectionError: If the client isn't connected
+		:except SignatureNotFound: If the client owner doesn't own the signature or the signature doesn't exist.
+		:except RootRequiredError: If the client isn't a root client
+		:except ValueError: If the new password have less then 7 characters
+		"""
+		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
+		if not self.con_data.document['RootMode']: raise self.RootRequiredError("The client need root permission")
+		if not self.ck_own(ref) or not self.ck_sigex(ref):
+			raise self.SignatureNotFound(f"The signature #{ref} doesn't exist or you don't own it")
+		if len(new_pass) < 7: raise ValueError("The passwords must have more then 7 characters")
+		with self.connection.cursor() as cursor:
+			rr = cursor.execute(f"SELECT vl_code FROM tb_signatures WHERE cd_signature = {ref};")
+			hashed = self.encode_hash(new_pass, cursor.fetchone()[0])
+			del rr
+			rr = cursor.execute(f"UPDATE tb_signatures SET vl_password = \"{hashed}\" WHERE cd_signature = {ref}")
+			del hashed, rr
+
+
+
+
+
+
 
