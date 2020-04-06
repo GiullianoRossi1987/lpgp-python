@@ -56,6 +56,8 @@ class ClientData(object):
 					raise self.InvalidFile("Invalid value at the 'Mode' field")
 				elif type(ld['LocalAccountID']) is not int or ld['LocalAccountID'] <= 0:
 					raise self.InvalidFile("Invalid value at the 'LocalAccountID' field")
+				elif type(ld['ClientName']) is str or len(ld['ClientName']) <= 0:
+					raise self.InvalidFile("Invalid value at the 'ClientName'")
 				else:
 					pass
 		except FileNotFoundError or PermissionError: raise self.InvalidFile("File unreadable")
@@ -147,3 +149,12 @@ class ClientData(object):
 		else:
 			if "Warning" in self.raw_doc.keys(): return self.raw_doc['Warning']
 			else: return None
+
+	@property
+	def name(self) -> str:
+		"""
+		That method represents the client name field on the client configurations file.
+		:return: The client name
+		"""
+		if not self.got_file: raise self.FileError("There's no configurations file loaded. Can't access the properties")
+		else: return self.raw_doc['ClientName']
