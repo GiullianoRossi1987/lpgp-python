@@ -2,9 +2,10 @@
 # using namespace std
 from json import loads, JSONDecodeError
 from typing import AnyStr
+from pymysql.connections import Connection
 
 
-class ClientData(object):
+class ClientData(object):  # deprecated
 	"""
 	That class manage the client configurations file. That class loads the configurations JSON file, but the class
 	don't write anything in the file, it also change the file permissions to 744 (linux mode).
@@ -158,3 +159,196 @@ class ClientData(object):
 		"""
 		if not self.got_file: raise self.FileError("There's no configurations file loaded. Can't access the properties")
 		else: return self.raw_doc['ClientName']
+
+
+class ClientDataAuto(object):
+	"""
+	That new class works getting the client data without a client configurations file, it uses a client
+	authentication file to search in the database for a client with the same token as the local client.
+	That uses a temporary MySQL database connection, loading the MySQL connection configurations file.
+
+	:cvar con_data: The server connection data, those data are used to connect to the MySQL database
+	:cvar got_data: if the class got the connection data, used for the connection
+	:cvar client_dt: The client loaded data, that data will have the client id, name, proprietary id
+						client token and client permission type
+	:cvar DELIMITER: The authentication file delimiter
+	:cvar got_client: If the class loaded the client data.
+
+	:type con_data: dict
+	:type got_data: bool
+	:type client_dt: tuple
+	"""
+
+	con_data: dict = {
+		"host": None,
+		"usr": None,
+		'passwd': None,
+		"port": None,
+		"db": None
+	}
+	got_data: bool = False
+	client_dt: tuple = ()
+	got_client: bool = False
+	DELIMITER = "/"
+
+	class DataError(Exception):
+		"""
+		Exception raised when the class don't got the connection data and tries to access them, or when the class
+		try to load the connection data without cleaning the attribute.
+		"""
+
+	class AuthenticationError(Exception):
+		"""
+		Exception raised when there was errors decoding the authentication file
+		"""
+
+	def load_data(self, host: str, usr: str, passwd: str, port: int = 3306, db: str = "LPGP_WEB"):
+		"""
+		That method loads the connection data received by parameters
+		:param host: The server IP to connect
+		:param usr: The server user used for the connection
+		:param passwd: The user selected password
+		:param port: The MySQL server port, by default it's 3306
+		:param db: The MySQL server database using.
+		:except DataError: If the class already loaded the connection data
+		"""
+		if self.got_data: raise self.DataError("The class already loaded the connection data")
+		self.con_data = {
+			"host": host,
+			"usr": usr,
+			"passwd": passwd,
+			"port": port,
+			"db": db
+		}
+		self.got_data = True
+
+	def clean_data(self):
+		"""
+		That method remove all the data loaded and set the got_data attribute as False
+		:except DataError: If the class don't loaded any data yet
+		"""
+		if not self.got_data: raise self.DataError("The class don't have any data already!")
+		self.con_data = {
+			"host": None,
+			"usr": None,
+			'passwd': None,
+			"port": None,
+			"db": None
+		}
+		self.got_data = False
+
+	def __init__(self, host: str = None, usr: str = None, passwd: str = None, port: int = 3306, db: str = "LPGP_WEB"):
+		"""
+		Starts the class loading the connection data, if any of the parameters are None, then
+		:param host: The MySQL server hostname
+		:param usr: The user to connect
+		:param passwd: The user password
+		:param port: The MySQL server port
+		:param db: The database to connect.
+		"""
+		# don't need to check the port and DB params 'cause they have default values.
+		if not (host is None or usr is None or passwd is None):
+			self.load_data(host, usr, passwd, port, db)
+		else: pass  # default values
+
+	def __del__(self):
+		"""
+		That method is used for a normal and simple garbage collection of the class.
+		"""
+		if self.got_data: self.clean_data()
+
+	def fetch_auth(self, auth_file: AnyStr = "lib/auth/auth.lpgp"):
+		"""
+		That method loads the configurations of a client, it will get the client token by the authentication file
+		and then will connect to the database and then return the data using a SQL simple query.
+		:param auth_file: The authentication file to use.
+		:except DataError: If the class don't have the connection data loaded yet.
+		:except AuthenticationError: if the file received couldn't be decoded.
+		"""
+		if not self.got_data: raise self.DataError("There's no connection data to start a connection!")
+		# decodes the file
+		with open(auth_file, "r", encoding="UTF-8") as to_load:
+			sep = str(to_load.read()).split(self.DELIMITER)
+			json_con = "".join([chr(int(num)) for num in sep])
+			dict_dt = loads(json_con)
+			# starts the connection
+			connection_tmp = Connection(
+				host=self.con_data['host'],
+				user=self.con_data['usr'],
+				password=self.con_data['passwd'],
+				db=self.con_data['db'],
+				port=self.con_data['port']
+			)
+			with connection_tmp.cursor() as cursor:
+				sql_query = f"""
+SELECT cl.cd_client,
+	   cl.nm_client,
+	   cl.vl_root,
+	   cl.id_proprietary,
+	   pr.nm_proprietary
+FROM tb_clients AS cl
+INNER JOIN tb_proprietaries AS pr
+ON pr.cd_proprietary = cl.id_proprietary
+WHERE cl.tk_client = "{dict_dt['Token']}";
+				"""
+				rows = cursor.execute(sql_query)
+				if rows <= 0 : raise self.AuthenticationError(f"Can't load the data from the file '{auth_file}'")
+				else:
+					self.client_dt = cursor.fetchone()
+					self.got_client = True
+			connection_tmp.close()
+
+	@property
+	def name(self) -> str:
+		"""
+		That property loads the client name of the data loaded. To access that and other properties you must have the
+		client data loaded.
+		:except DataError: If the instance don't have the client data from the MySQL database.
+		:return: The second position of the client_dt attribute
+		"""
+		if not self.got_data or not self.got_client: raise self.DataError("There's no client data!")
+		else: return str(self.client_dt[1])
+
+	@property
+	def id(self) -> int:
+		"""
+		That property loads the client id of the client data loaded. To access that and other properties you must have
+		the client data loaded.
+		:except DataError: If the instance don't have the client data from the MySQL database.
+		:return: The first position of the client_dt attribute
+		"""
+		if not self.got_client or not self.got_data: raise self.DataError("There's no client data!")
+		else: return int(self.client_dt[0])
+
+	@property
+	def propId(self) -> int:
+		"""
+		That property loads the client owner id of the client data loaded. To access that and other properties you must
+		have the client data loaded.
+		:except DataError: If the instance don't have the client data
+		:return: The fourth item of the client_df attribute
+		"""
+		if not self.got_data or not self.got_client: raise self.DataError("There's no client data")
+		else: return int(self.client_dt[3])
+
+	@property
+	def propNm(self) -> str:
+		"""
+		That property loads the client owner name of the client data loaded. To access that and other properties you
+		must have loaded the client data.
+		:except DataError: If the class don't have the client data
+		:return: The last position of the client_dt attribute.
+		"""
+		if not self.got_client or not self.got_data: raise self.DataError("There's no client data")
+		else: return str(self.client_dt[4])
+
+	@property
+	def mode(self) -> int:
+		"""
+		That property loads the client permissions type. To access that and other properties you must have the client
+		data loaded.
+		:except DataError: If the class don't have the client data.
+		:return: The third position of the client_dt attribute
+		"""
+		if not self.got_data or not self.got_client: raise self.DataError("There's no client data")
+		else: return int(self.client_dt[2])

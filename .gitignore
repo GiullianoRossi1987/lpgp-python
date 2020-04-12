@@ -2,3 +2,4 @@
 lib/auth/auth.lpgp
 lib/auth/talkback.dat
 ./.vscode
+lib/client_config.json
