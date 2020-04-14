@@ -10,7 +10,7 @@ from base64 import b64decode
 import hashlib
 from os import listdir
 from sys import platform
-from lib.client_data import ClientData
+from lib.client_data import ClientDataAuto
 
 
 class MySQLConnectionOptions(object):
@@ -156,12 +156,12 @@ class MySQLExternalConnection(object):
 	:type connection: MySQLConnection
 	:type con_data: MySQLConnectionOptions
 	:type got_conn: bool
-	:type gen_cl: ClientData
+	:type gen_cl: ClientDataAuto
 	"""
 	connection: MySQLConnection
 	con_data: MySQLConnectionOptions
 	got_conn: bool = False
-	gen_cl: ClientData
+	gen_cl: ClientDataAuto
 
 	class RootRequiredError(PermissionError):
 		"""
@@ -210,7 +210,13 @@ class MySQLExternalConnection(object):
 			db="LPGP_WEB"
 		)
 		self.got_conn = True
-		self.gen_cl = ClientData()
+		self.gen_cl = ClientDataAuto(
+			host=self.con_data.document['General']['Primary-Host'],
+			usr=usr_access,
+			passwd=passwd_access,
+			db="LPGP_WEB",
+			port=self.con_data.document['General']['Default-Port']
+		)
 		self.add_log(f"STARTED CONNECTION WITH {self.con_data.document['General']['Primary-Host']}::{self.con_data.document['General']['Default-Port']}")
 
 	def disconnect(self):
@@ -261,10 +267,7 @@ class MySQLAccountManager(MySQLExternalConnection):
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("There's no database connected")
 		with self.connection.cursor() as cursor:
-			if self.gen_cl.mode == 0:
-				rt = cursor.execute(f"SELECT nm_proprietary, vl_email, vl_password, dt_creation FROM tb_proprietaries WHERE cd_proprietary = {self.gen_cl.ownerID};")
-			else:
-				rt = cursor.execute(f"SELECT nm_user, vl_email, vl_password, dt_creation FROM tb_users WHERE cd_user = {self.gen_cl.ownerID};")
+			rt = cursor.execute(f"SELECT nm_proprietary, vl_email, vl_password, dt_creation FROM tb_proprietaries WHERE cd_proprietary = {self.gen_cl.propId};")
 			raw = cursor.fetchone()
 			return tuple(raw) + tuple([self.gen_cl.mode])
 
@@ -309,13 +312,10 @@ class MySQLAccountManager(MySQLExternalConnection):
 		:except RootRequiredError: If the client isn't a root client to do that action
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("There's no database connected")
-		if not self.gen_cl.rootMode:
+		if self.gen_cl.mode == 0:
 			raise self.RootRequiredError("The client don't have permission to do that!")
 		with self.connection.cursor() as cursor:
-			if self.gen_cl.mode == 0:
-				rt = cursor.execute(f"UPDATE tb_proprietaries SET nm_proprietary = \"{new_name}\" WHERE cd_proprietary = {self.gen_cl.ownerID};")
-			else:
-				rt = cursor.execute(f"UPDATE tb_users SET nm_user = \"{new_name}\" WHERE cd_user = {self.gen_cl.ownerID};")
+			rt = cursor.execute(f"UPDATE tb_proprietaries SET nm_proprietary = \"{new_name}\" WHERE cd_proprietary = {self.gen_cl.propId};")
 			del rt
 
 	@staticmethod
@@ -341,15 +341,15 @@ class MySQLAccountManager(MySQLExternalConnection):
 		:except InvalidEmail: If the email address isn't valid
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The class isn't connected!")
-		if not self.gen_cl.rootMode:
+		if self.gen_cl.mode == 0:
 			raise self.RootRequiredError("The root permission is required for that action!")
 		if not self.ck_email(new_email):
 			raise self.InvalidEmail("Invalid e-mail address! Please verify if it have '@' and '.com'")
 		with self.connection.cursor() as cursor:
 			if self.gen_cl.mode == 0:
-				rq = cursor.execute(f"UPDATE tb_proprietaries SET vl_email = \"{new_email}\" WHERE cd_proprietary = {self.gen_cl.ownerID};")
+				rq = cursor.execute(f"UPDATE tb_proprietaries SET vl_email = \"{new_email}\" WHERE cd_proprietary = {self.gen_cl.propId};")
 			else:
-				rq = cursor.execute(f"UPDATE tb_users SET vl_email = \"{new_email}\" WHERE cd_user = {self.gen_cl.ownerID};")
+				rq = cursor.execute(f"UPDATE tb_users SET vl_email = \"{new_email}\" WHERE cd_user = {self.gen_cl.propId};")
 			del rq
 
 	def ch_passwd(self, new_passwd: str, encoded: bool = False):
@@ -361,15 +361,11 @@ class MySQLAccountManager(MySQLExternalConnection):
 		:except RootRequiredError: If the client isn't a root client
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The class isn't connected")
-		if not self.gen_cl.rootMode:
+		if self.gen_cl.mode == 0:
 			raise self.RootRequiredError("The root client is required for that action")
 		with self.connection.cursor() as cursor:
 			passwd_new = b64encode(new_passwd) if not encoded else new_passwd
-			if self.gen_cl.mode == 0:
-				rt = cursor.execute(f"UPDATE tb_proprietaries SET vl_password = \"{passwd_new}\" WHERE cd_proprietary = {self.gen_cl.ownerID}")
-			else:
-				rt = cursor.execute(
-					f"UPDATE users SET vl_password = \"{passwd_new}\" WHERE cd_user = {self.gen_cl.ownerID}")
+			rt = cursor.execute(f"UPDATE tb_proprietaries SET vl_password = \"{passwd_new}\" WHERE cd_proprietary = {self.gen_cl.propId}")
 			del rt
 
 
@@ -400,13 +396,9 @@ class MySQLOwnerHistory(MySQLExternalConnection):
 		if (valid and code != 0) or (not valid and code == 0):
 			raise self.ParameterLogicError("There're programming logical errors with the parameters ::valid and ::code received")
 		with self.connection.cursor() as cursor:
-			owner_ref = self.gen_cl.ownerID
+			owner_ref = self.gen_cl.propId
 			val = 1 if valid else 0
-			if self.gen_cl.mode == 0:
-				crs = cursor.execute(f"INSERT INTO tb_signatures_prop_h (id_prop, id_signature, vl_code, vl_valid, dt_reg) VALUES ({owner_ref}, {signature_ref}, {code}, {val}, {dt_});")
-			else:
-				crs = cursor.execute(
-					f"INSERT INTO tb_signature_check_history (id_user id_signature, vl_code, vl_valid, dt_reg) VALUES ({owner_ref}, {signature_ref}, {code}, {val}, {dt_});")
+			crs = cursor.execute(f"INSERT INTO tb_signatures_prop_h (id_prop, id_signature, vl_code, vl_valid, dt_reg) VALUES ({owner_ref}, {signature_ref}, {code}, {val}, {dt_});")
 		del crs
 
 	def get_records(self) -> tuple:
@@ -417,10 +409,9 @@ class MySQLOwnerHistory(MySQLExternalConnection):
 		:return: A tuple with the owner history records
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
-		if not self.gen_cl.rootMode: raise self.RootRequiredError("The client must be root to do that action!")
+		if self.gen_cl.mode == 0: raise self.RootRequiredError("The client must be root to do that action!")
 		with self.connection.cursor() as cursor:
-			if self.gen_cl.mode == 0: c = cursor.execute(f"SELECT * FROM tb_signatures_prop_h WHERE id_prop = {self.gen_cl.ownerID};")
-			else: c = cursor.execute(f"SELECT * FROM tb_signature_check_history WHERE id_user = {self.gen_cl.ownerID};")
+			c = cursor.execute(f"SELECT * FROM tb_signatures_prop_h WHERE id_prop = {self.gen_cl.propId};")
 			return cursor.fetchall() if c > 0 else None
 
 
@@ -492,7 +483,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 			rr = cursor.execute(f"SELECT id_proprietary FROM tb_signatures WHERE cd_signature = {ref};")
 			id_or = cursor.fetchone()[0]
 			del rr
-		return id_or == self.gen_cl.ownerID
+		return id_or == self.gen_cl.propId
 
 	def decode_root(self, code: str) -> dict:
 		"""
@@ -615,7 +606,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
 		if self.gen_cl.mode != 0: raise self.AccountError("You must be a proprietary to access this feature")
-		if not self.gen_cl.rootMode: raise self.RootRequiredError("The client must be root to do that action")
+		if self.gen_cl.mode == 0: raise self.RootRequiredError("The client must be root to do that action")
 		if not self.ck_sigex(ref): raise self.SignatureNotFound(f"The client can't find the signature #{ref}")
 		if not self.ck_own(ref): raise self.SignatureNotFound(f"You don't own the signature #{ref}")
 		nm_file = self.gen_filenm(path)
@@ -647,15 +638,13 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 		:except AccountError: If the owner is a normal user instead a proprietary
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
-		if not self.gen_cl.rootMode:
+		if self.gen_cl.mode == 0:
 			raise self.RootRequiredError("The client need root permissions!")
-		if self.con_data.document["Mode"] != 0:
-			raise self.AccountError("You must be a proprietary to do that action")
 		if code > len(self.algos) or code < 0: raise IndexError("Invalid signature code!")
 		with self.connection.cursor() as cursor:
 			_pass = self.encode_hash(password, code)
 			rr = cursor.execute(f"INSERT INTO tb_signatures (vl_code, vl_password, id_proprietary) "
-								f"VALUES ({code}, \"{_pass}\", {self.gen_cl.ownerID});")
+								f"VALUES ({code}, \"{_pass}\", {self.gen_cl.propId});")
 			del rr
 			del _pass
 
@@ -669,7 +658,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 		:except SignatureNotFound: If the signature reference doesn't exist or the client owner don't own it.
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
-		if not self.gen_cl.rootMode: raise self.RootRequiredError("The client need root permissions")
+		if self.gen_cl.mode == 0: raise self.RootRequiredError("The client need root permissions")
 		if not self.ck_sigex(ref) or not self.ck_own(ref):
 			raise self.SignatureNotFound(f"The signature #{ref} doesn't exist or you don't own it.")
 		with self.connection.cursor() as cursor:
@@ -689,7 +678,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 		:except AuthenticationError: If the password confirmed received isn't the same.
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected!")
-		if not self.gen_cl.rootMode:
+		if self.gen_cl.mode == 0:
 			raise self.RootRequiredError("The client need root permission to do that action!")
 		if not self.ck_sigex(ref) or not self.ck_own(ref):
 			raise self.SignatureNotFound(f"The referred signature #{ref} doesn't exist or you don't own it.")
@@ -717,7 +706,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 		:except ValueError: If the new password have less then 7 characters
 		"""
 		if not self.got_conn: raise self.MySQLConnectionError("The client isn't connected")
-		if not self.gen_cl.rootMode: raise self.RootRequiredError("The client need root permission")
+		if self.gen_cl.mode == 0: raise self.RootRequiredError("The client need root permission")
 		if not self.ck_own(ref) or not self.ck_sigex(ref):
 			raise self.SignatureNotFound(f"The signature #{ref} doesn't exist or you don't own it")
 		if len(new_pass) < 7: raise ValueError("The passwords must have more then 7 characters")
