@@ -532,7 +532,7 @@ class MySQLSignaturesManager(MySQLExternalConnection):
 			return md5.hexdigest()
 		elif hash_id == 1:
 			sha1 = hashlib.sha1()
-			sha1.update(bytes(data, encoding="utf-8"))
+			sha1.update(bytes(data, encoding="UTF-8"))
 			return sha1.hexdigest()
 		elif hash_id == 2:
 			sha256 = hashlib.sha256()

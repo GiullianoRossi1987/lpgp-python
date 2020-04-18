@@ -7,6 +7,7 @@ from pymysql.connections import Connection
 
 class ClientData(object):  # deprecated
 	"""
+	**Warning: That class was deprecated**
 	That class manage the client configurations file. That class loads the configurations JSON file, but the class
 	don't write anything in the file, it also change the file permissions to 744 (linux mode).
 	:cvar file_loaded: The configurations file that the class loaded
