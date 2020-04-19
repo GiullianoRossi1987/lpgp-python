@@ -2,7 +2,11 @@
 # using namespace std
 from typing import AnyStr
 from time import strftime
-
+from yaml import load as yamlLoad
+from yaml import dump as yamlDump
+from yaml.loader import Loader
+from yaml.dumper import Dumper
+from yaml import YAMLError, MarkedYAMLError
 
 class DefaultLogger(object):
 	"""
@@ -101,6 +105,123 @@ class DefaultLogger(object):
 		if not self.gotFile: raise self.NoLogFileFound("There's no logs file loaded")
 		with open(self.logsFile, "a+", encoding="UTF-8") as logs:
 			logToJoin = [strftime("%Y-%m-%d %H:%M:%S"), str(err_code) if not success else "", action,
-						 err_msg if not success else "", "\n"]
+						 "ERROR: " + err_msg if not success else "", "\n"]
 			logs.write("    ".join(logToJoin))
 			del logToJoin
+
+
+class Envvars(object):
+	"""
+	That class loads and manages the environment variables of the system. Those environment variables are setted in the
+	lib/envvars.yml file. Those variables are miscellaneous for the system, but we must have then working.
+
+	:cvar envFile: The environment vars file loaded
+	:cvar gotVars: If the class got a envFile attribute configured
+	:cvar __logger: That's the logs file managed to use.
+	:cvar envvars:  Here's the YAML file content parsed, ready for use as the variables.
+	"""
+	envFile: AnyStr = ""
+	gotVars: bool = False
+	__logger: DefaultLogger = DefaultLogger("logs/general.log")
+	envvars: dict = dict()
+
+	class NoEnvVarsLoaded(Exception):
+		"""
+		<Exception> Raised when the class try to access the envvars file or the envvars parsed and both, or one of those
+		isn't configured
+		"""
+		ERR_CODE = 1098
+
+	class EnvVarsLoaded(Exception):
+		"""
+		<Exception> Raised when the class try to reconfigure the loaded envvars file, which is already configured
+		"""
+		ERR_CODE = 1099
+
+	def loadFile(self, envfile: AnyStr):
+		"""
+		That method loads a envvars file to the class and parses it.
+		:param envfile: The envvars file to load.
+		:raise EnvVarsLoaded: If the class already have a envvars file loaded
+		:return: Nothing
+		"""
+		if self.gotVars:
+			self.__logger.addLog(f"Tried to load file '{envfile}'", False,
+								 f"EnvVars '{self.envFile}' file loaded already! ", self.EnvVarsLoaded.ERR_CODE)
+			raise self.EnvVarsLoaded("EnvVars file loaded already!")
+		try:
+			with open(envfile, "r", encoding='utf-8') as envvars:
+				try:
+					self.envvars = yamlLoad(envvars.read(), Loader)
+				except MarkedYAMLError or YAMLError as yml_err1:
+					self.__logger.addLog(f"Tried to read file {envfile}", False, f"PACK_ERROR [yaml::YAMLError]: {yml_err1}", 100)
+					raise yml_err1
+				else:
+					self.envFile = envfile
+					self.gotVars = True
+					self.__logger.addLog(f"Loaded envvars file {envfile}", True)
+		except FileNotFoundError or PermissionError as internal:
+			self.__logger.addLog(f"Tried to load file {envfile}", False, f"INTERNAL [{internal}]: {internal}", 404)
+		else: pass
+
+	def reparse(self):
+		"""
+		That method reparses a envvars file loaded. Reloading the envvars parseds
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded.
+		:return: Nothing
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file found!", self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("No envvars file loaded!")
+		with open(self.envFile, "r", encoding="utf-8") as reparse:
+			try:
+				self.envvars = yamlLoad(reparse.read(), Loader)
+			except MarkedYAMLError or YAMLError as yml_err1:
+				self.__logger.addLog(f"Tried to reparse file {self.envFile}", False, f"PACK_ERROR [yaml::YAMLError]: {yml_err1}", 100)
+				raise yml_err1
+			else: self.__logger.addLog(f"Reloaded envvars file {self.envFile}", True)
+
+	def dumpsFile(self):
+		"""
+		That method writes in the envvars file loaded.
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file found!", self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("No envvars file loaded!")
+		with open(self.envFile, "w", encoding="utf-8") as toDump:
+			try:
+				dumped = yamlDump(data=self.envvars, Dumper=Dumper)
+				toDump.write(dumped)
+			except YAMLError or MarkedYAMLError as yml_err2:
+				self.__logger.addLog(f"Tried to write in {self.envFile}", False, f"PACK_ERROR [yaml::]: {yml_err2}", 100)
+				raise yml_err2
+			except FileNotFoundError or PermissionError as internal:
+				self.__logger.addLog(f"Tried to write/access the file {self.envFile}", False, f"INTERNAL: {internal}", 404)
+				raise internal
+			else:
+				self.__logger.addLog(f"Wrote file {self.envFile}")
+
+	def __init__(self, envfile: AnyStr = "lib/envvars.yml"):
+		"""
+		Starts the class with a envvars file loaded
+		:param envfile: The envvars file to load.
+		"""
+		if envfile is not None:
+			self.loadFile(envfile)
+		else:
+			self.envFile = ""
+			self.envvars = {}
+			self.gotVars = False
+
+	def unloadFile(self):
+		"""
+		That method closes any envvars file loaded by the class.
+		:return:
+		"""
+
+	def __del__(self):
+		"""
+
+		:return:
+		"""

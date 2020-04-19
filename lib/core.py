@@ -11,6 +11,13 @@ import hashlib
 from os import listdir
 from sys import platform
 from lib.client_data import ClientDataAuto
+from lib.logger import DefaultLogger as Logger
+
+
+gbl_err = Logger.errorLogs()
+gbl_signatures = Logger("logs/signatures-gen.log")
+gbl_general = Logger("logs/gen-logs.log")
+gbl_connection = Logger("logs/mysql-con.log")
 
 
 class MySQLConnectionOptions(object):
@@ -217,7 +224,7 @@ class MySQLExternalConnection(object):
 			db="LPGP_WEB",
 			port=self.con_data.document['General']['Default-Port']
 		)
-		self.add_log(f"STARTED CONNECTION WITH {self.con_data.document['General']['Primary-Host']}::{self.con_data.document['General']['Default-Port']}")
+		gbl_connection.addLog("STARTED CLIENT MYSQL")
 
 	def disconnect(self):
 		"""
