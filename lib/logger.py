@@ -8,6 +8,7 @@ from yaml.loader import Loader
 from yaml.dumper import Dumper
 from yaml import YAMLError, MarkedYAMLError
 
+
 class DefaultLogger(object):
 	"""
 	That class writes and reads a logs file, doing the management of the system actions.
@@ -104,8 +105,12 @@ class DefaultLogger(object):
 		"""
 		if not self.gotFile: raise self.NoLogFileFound("There's no logs file loaded")
 		with open(self.logsFile, "a+", encoding="UTF-8") as logs:
-			logToJoin = [strftime("%Y-%m-%d %H:%M:%S"), str(err_code) if not success else "", action,
-						 "ERROR: " + err_msg if not success else "", "\n"]
+			logToJoin = [
+				"[", strftime("%Y-%m-%d %H:%M:%S"), "]",
+				str(err_code) if not success else "",
+				action,
+				"ERROR: " + err_msg if not success else "",
+				"\n"]
 			logs.write("    ".join(logToJoin))
 			del logToJoin
 
@@ -217,11 +222,129 @@ class Envvars(object):
 	def unloadFile(self):
 		"""
 		That method closes any envvars file loaded by the class.
-		:return:
+		:raises NoEnvVarsLoaded: If there's no logs file loaded yet.
 		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded", self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("No envvars file loaded !")
+		self.dumpsFile()
+		toLog = self.envFile
+		self.envFile = ""
+		self.envvars = {}
+		self.gotVars = False
+		self.__logger.addLog(f"Closed envvars file {toLog}")
+		del toLog
 
 	def __del__(self):
 		"""
-
-		:return:
+		Method normally used for the garbage collection of the class instance and objects.
+		It will close any envvars file loaded before terminating the instance.
 		"""
+		if self.gotVars: self.unloadFile()
+
+	@property
+	def mysqlInstances(self) -> int:
+		"""
+		That property represents the MySQL instancces open referred in the envvars file.
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded yet.
+		:return: The MySQL instances value from the envvars file.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded", self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.__logger.addLog("Access permitted to the MySQL instances field")
+			return int(self.envvars['temp']['mysqlInstances'])
+
+	@mysqlInstances.setter
+	def mysqlInstances(self, value: int):
+		"""
+		Overwrite the envvars file field mysqlInstances with another number
+		:param value: The value to set.
+		:raises NoEnvVarsLoaded: If there's no envvars file loaded.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.envvars['temp']['mysqlInstances'] = value
+			self.dumpsFile()
+			self.__logger.addLog(f"Overwrote mysqlInstances field value, to: {value}")
+
+	@property
+	def signaturesCount(self) -> int:
+		"""
+		That property represents the signature authenticated times.
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file laaded yet.
+		:return: The envvars file field value
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.__logger.addLog("Access permitted to the signatures counts field")
+			return int(self.envvars['temp']['signaturesLoadeds'])
+
+	@signaturesCount.setter
+	def signaturesCount(self, value: int):
+		"""
+		That method set a new value to the property signaturesCount of the class, it also will overwrite the envvars file
+		after the value changing.
+		:param value: The new field value
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded yet.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.envvars['temp']['signaturesLoadeds'] = value
+			self.dumpsFile()
+			self.__logger.addLog(f"Overwrote the envvars file, seated the signaturesLoadeds field to: {value}")
+
+	@property
+	def timesAuth(self) -> int:
+		"""
+		That property represents how many times the client was authenticated.
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded yet
+		:return: The field timesAuthenticated value
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.__logger.addLog("Access permitted to timesAuthenticated field")
+			return int(self.envvars['temp']['timesAuthenticated'])
+
+	@timesAuth.setter
+	def timesAuth(self, value: int):
+		"""
+		That method sets a new integer value to the timesAuth property.
+		:param value: The new timesAuthenticated field value.
+		:raises NoEnvVarsLoaded: If the class don't have a envvars file loaded yet.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		else:
+			self.envvars['temp']['timesAuthenticated'] = value
+			self.dumpsFile()
+			self.__logger.addLog(f"Overwrote the field timesAuthenticated to value: {value}")
+
+	def resetVals(self):
+		"""
+		That method will reset all the values of the fields to 0, used when the class terminates it self.
+		:raises NoEnvVarsLoaded: If the class don't have any envvars file loaded yet.
+		"""
+		if not self.gotVars:
+			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file loaded",
+								 self.NoEnvVarsLoaded.ERR_CODE)
+			raise self.NoEnvVarsLoaded("There's no envvars file loaded.")
+		self.mysqlInstances = 0
+		self.signaturesCount = 0
+		self.timesAuth = 0
+		self.__logger.addLog("Reset the values of the vars.")
