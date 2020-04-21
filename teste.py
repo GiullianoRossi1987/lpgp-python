@@ -12,4 +12,5 @@ mo = MySQLConnectionOptions("lib/mysql-config.json")
 cl = ClientDataAuto(mo.document['General']['Primary-Host'], access_nm, "")
 
 cl.fetch_auth()
-print("ok " + cl.name)
+
+mysqlInstance = MySQLExternalConnection(mo, access_nm)

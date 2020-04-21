@@ -14,8 +14,6 @@ from lib.client_data import ClientDataAuto
 from lib.logger import DefaultLogger as Logger
 from lib.logger import Envvars
 
-gbl_err = Logger("logs/error.log")
-gbl_signatures = Logger("logs/signatures-gen.log")
 gbl_connection = Logger("logs/mysql-con.log")
 gbl_vars = Envvars()
 
@@ -249,7 +247,7 @@ class MySQLExternalConnection(object):
 		:except MySQLConnectionError: If the class already got a connection
 		"""
 		if self.got_conn:
-			gbl_connection.addLog(f"[{self.__str__}] Tried to load internal connection", False,
+			gbl_connection.addLog(f"[{self.__str__()}] Tried to load internal connection", False,
 								  "Not connected yet.", 1432)
 			raise self.MySQLConnectionError("There's a MySQL connection already configured!")
 
@@ -268,7 +266,9 @@ class MySQLExternalConnection(object):
 			db="LPGP_WEB",
 			port=self.con_data.document['General']['Default-Port']
 		)
-		gbl_connection.addLog(f"{self.__str__} STARTED CONNECTION WITH {self.con_data.document['General']['Primary-Host']}:{self.con_data.document['General']['Default-Port']}")
+		gbl_connection.addLog(f"{self.__str__()} STARTED CONNECTION WITH {self.con_data.document['General']['Primary-Host']}:{self.con_data.document['General']['Default-Port']}")
+		gbl_vars.mysqlInstances = gbl_vars.mysqlInstances + 1
+		gbl_connection.addLog(f"{self.__str__()} GENERATED NEW MySQL INSTANCE: {gbl_vars.mysqlInstances}")
 
 	def disconnect(self):
 		"""
@@ -284,7 +284,9 @@ class MySQLExternalConnection(object):
 		tmp_host, tmp_port = self.con_data.document['General']['Primary-Host'], self.con_data.document['General']['Default-Port']
 		self.con_data.unload()
 		self.got_conn = False
-		gbl_connection.addLog(f"{self.__str__} DISCONNECTED FROM {tmp_host}:{tmp_port}")
+		gbl_connection.addLog(f"{self.__str__()} DISCONNECTED FROM {tmp_host}:{tmp_port}")
+		gbl_connection.addLog(f"{self.__str__()} PURGED MYSQL INSTANCE {gbl_vars.mysqlInstances}")
+		gbl_vars.mysqlInstances = gbl_vars.mysqlInstances - 1
 
 	def __init__(self, config: MySQLConnectionOptions = None, usr_access: str = None):
 		"""

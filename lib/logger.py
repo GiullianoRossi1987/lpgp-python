@@ -194,7 +194,7 @@ class Envvars(object):
 		if not self.gotVars:
 			self.__logger.addLog("Tried to load internal envvars file", False, "No envvars file found!", self.NoEnvVarsLoaded.ERR_CODE)
 			raise self.NoEnvVarsLoaded("No envvars file loaded!")
-		with open(self.envFile, "w", encoding="utf-8") as toDump:
+		with open(file=self.envFile, mode="w", encoding="utf-8") as toDump:
 			try:
 				dumped = yamlDump(data=self.envvars, Dumper=Dumper)
 				toDump.write(dumped)
