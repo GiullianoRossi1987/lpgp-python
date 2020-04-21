@@ -106,7 +106,7 @@ class DefaultLogger(object):
 		if not self.gotFile: raise self.NoLogFileFound("There's no logs file loaded")
 		with open(self.logsFile, "a+", encoding="UTF-8") as logs:
 			logToJoin = [
-				"[", strftime("%Y-%m-%d %H:%M:%S"), "]",
+				"[" + strftime("%Y-%m-%d %H:%M:%S") + "]",
 				str(err_code) if not success else "",
 				action,
 				"ERROR: " + err_msg if not success else "",
