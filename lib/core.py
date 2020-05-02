@@ -10,9 +10,9 @@ from base64 import b64decode
 import hashlib
 from os import listdir
 from sys import platform
-from lib.client_data import ClientDataAuto
-from lib.logger import DefaultLogger as Logger
-from lib.logger import Envvars
+from .client_data import ClientDataAuto
+from .logger import DefaultLogger as Logger
+from .logger import Envvars
 
 gbl_connection = Logger("logs/mysql-con.log")
 gbl_vars = Envvars()
@@ -34,10 +34,10 @@ class MySQLConnectionOptions(object):
 	class FileError(Exception):
 		"""
 		Exception raised when the class try to access the loaded file, but there's no configurations file loaded yet.
-		Also raised when the configurations class try to load a configurations file but there's another one loaded already
-		"""
+		Also raised when the con
 		ERR_CODE = 1432
-
+figurations class try to load a configurations file but there's another one loaded already
+		"""
 	class InvalidConfigurationsFile(Exception):
 		"""
 		Exception raised when the configurations file class try to load a configurations file, but that isn't a valid

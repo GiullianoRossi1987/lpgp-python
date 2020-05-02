@@ -1,6 +1,6 @@
 # coding = utf-8
 # using namespace std
-from typing import AnyStr, Type
+from typing import AnyStr
 from json import loads
 from json import dumps
 from json import JSONDecodeError
