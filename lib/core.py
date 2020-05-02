@@ -13,7 +13,6 @@ from sys import platform
 from .client_data import ClientDataAuto
 
 
-
 class MySQLConnectionOptions(object):
 	"""
 	That class manages the MySQL external database configurations file. That configurations file have the main data
@@ -67,13 +66,6 @@ class MySQLConnectionOptions(object):
 					elif i == "Connection-Logs":
 						if type(l) is not str or len(l) == 0:
 							raise self.InvalidConfigurationsFile("Invalid value [Connection-Logs::] expecting file path")
-						else:
-							try:
-								a = open(l, "a", encoding="UTF-8")
-								a.close()
-								del a
-							except FileNotFoundError or PermissionError:
-								raise self.InvalidConfigurationsFile("Invalid file path [Connection-Logs::] unreachable file")
 					else:
 						raise self.InvalidConfigurationsFile(f"Invalid field '{i}' [General::]")
 				del loaded
@@ -248,14 +240,15 @@ class MySQLExternalConnection(object):
 		self.con_data.unload()
 		self.got_conn = False
 
-	def __init__(self, config: MySQLConnectionOptions = None, usr_access: str = None):
+	def __init__(self, config: MySQLConnectionOptions = None, usr_access: str = None, passwd_access: str = None):
 		"""
 		That method initialize the class instance/object creating a connection with a MySQL database server. If any of
 		the methods parameters is None then the class will set default values for the attributes.
 		:param config: The MySQLConnectionOptions object to load
 		:param usr_access: The user access received
+		:param passwd_access: The user password received
 		"""
-		if config is not None and usr_access is not None: self.connect(config, usr_access)
+		if config is not None and usr_access is not None: self.connect(config, usr_access, passwd_access)
 
 	def __del__(self):
 		"""

@@ -80,10 +80,7 @@ class SocketConfig(object):
 						raise self.InvalidFile(f"Invalid Field '{addr_con}' at the Addr field")
 				for action_con in prs['Action'].keys():
 					if action_con == "auth-file":
-						try:
-							o = open(prs['Action']['auth-file'], "r")
-							del o
-						except FileNotFoundError or PermissionError as e:
+						if len(prs['Action'][action_con]) <= 0:
 							raise self.InvalidFile(f"Invalid client signature file [{e.args}] at the Actions field")
 						else: continue
 					elif action_con == "Permissive":
@@ -265,6 +262,16 @@ class Client4(object):
 		with open(self.sock_conf.config['Action']['auth-file'], "r") as auth:
 			return auth.read(), len(auth.read())
 
+	def get_ext_auth(self, auth: AnyStr) -> tuple:
+		"""
+		That method returns the authentication client file content and it length, ready to send to the server
+		:param auth: The auth file path to load
+		:return: The file content and the size of it
+		"""
+		if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file/object loaded yet")
+		with open(auth, "r") as auth:
+			return auth.read(), len(auth.read())
+
 	@staticmethod
 	def add_log(logs_file: AnyStr = "lib/auth/talkback.dat", data: str = "", from_server: bool = False):
 		"""
@@ -297,6 +304,24 @@ class Client4(object):
 		self.add_log(data=auth, from_server=False)
 		response = self.sock.recv(1024, 0)
 		self.add_log(data=str(response, "UTF-8"), from_server=True)
+		splt = repr(response).split("/")
+		if "1" in splt[0]:
+			return tuple(splt)
+		else:
+			if auto_raise: raise self.AuthenticationError("Invalid client .lpgp file")
+			else: return "0", None
+
+	def ext_connect_auth(self, client: AnyStr, auto_raise: bool, tback: AnyStr) -> tuple:
+		if not self.got_info: raise self.ConfigNotLoaded("There's no configurations file or object loaded to the class.")
+		if bool(self.con_info['HSRe']):
+			self.sock.connect((self.con_info['Host'], self.con_info['Port']))
+			handshake = self.sock.recv(1024, 0)
+			self.add_log(tback, data=str(handshake, "UTF-8"), from_server=True)
+		auth, bufsize = self.get_ext_auth(client)
+		self.sock.send(bytes(auth, "UTF-8"), 0)
+		self.add_log(tback, data=auth, from_server=False)
+		response = self.sock.recv(1024, 0)
+		self.add_log(tback, data=str(response, "UTF-8"), from_server=True)
 		splt = repr(response).split("/")
 		if "1" in splt[0]:
 			return tuple(splt)
